@@ -19,11 +19,18 @@
             <option value="80">80 × 80</option>
           </select>
         </label>
+        <label>
+          模板：
+          <select id="templateSelect">
+            <option value="">选择模板…</option>
+          </select>
+        </label>
         <button id="btnImport" title="把图片自动转换成拼豆图案">🖼️ 导入图片</button>
         <input type="file" id="fileInput" accept="image/*" hidden />
         <button id="btnExport" title="导出拼豆图案 PNG">📸 导出 PNG</button>
         <button id="btnSave" title="保存到浏览器">💾 保存</button>
         <button id="btnLoad" title="从浏览器读取">📂 读取</button>
+        <button id="btnSound" title="声音开关">🔊</button>
         <button id="btnClear" class="danger" title="清空画板">🗑️ 清空</button>
       </div>
     </header>
@@ -39,8 +46,9 @@
         <div>当前颜色：<span id="curColorName"></span></div>
         <div>已放豆数：<span id="beadCount">0</span></div>
         <div class="hint">
-          左键拖动放豆 · 右键擦除<br />
-          拖拽空白处旋转视角 · 滚轮缩放
+          鼠标就是夹子，夹着一颗豆<br />
+          左键放下豆子（哒！）· 右键擦除<br />
+          中键拖动旋转视角 · 滚轮缩放
         </div>
       </div>
     </aside>

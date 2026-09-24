@@ -24,6 +24,151 @@ const PALETTE = [
   { name: "灰色", hex: 0x8e8e8e },
   { name: "深灰", hex: 0x4a4a4a },
   { name: "黑色", hex: 0x1a1a1a },
+  { name: "珊瑚橙", hex: 0xd97757 }, // Claude 品牌色
+];
+
+/* ============================================================
+ * 内置模板：字符画 → 调色板索引（. 表示空）
+ * ============================================================ */
+const CHAR_MAP = {
+  W: 0, C: 19, Y: 2, O: 3, R: 4, P: 5, T: 6, V: 7, M: 8,
+  S: 9, B: 10, N: 11, G: 12, D: 13, E: 14, L: 15, A: 16, H: 17, K: 18,
+};
+
+const TEMPLATES = [
+  {
+    name: "🟠 Claude 标志",
+    art: [
+      "...KKKKKKKK...",
+      ".KCCCCCCCCCCK.",
+      "KCCCCCCCCCCCCK",
+      "KCCCCKKKKCCCCK",
+      "KCCCKKKKKKCCCK",
+      "KCCCCKKKKCCCCK",
+      "KCCCCCKKCCCCCK",
+      "KCCCCCCCCCCCCK",
+      ".KCCCCCCCCCCK.",
+      "...KKKKKKKK...",
+    ],
+  },
+  {
+    name: "😊 Claude 小精灵",
+    art: [
+      "......KWK.....",
+      "....KKKKKK....",
+      "..KKCCCCCCKK..",
+      ".KCCCCCCCCCCK.",
+      ".KCCKKCCCKKCC.",
+      ".KCPCCCCCCPCC.",
+      ".KCCCKKKKCCCK.",
+      ".KCCCCCCCCCCK.",
+      "..KCCCCCCCCK..",
+      "....KKKKKK....",
+    ],
+  },
+  {
+    name: "❤️ 爱心",
+    art: [
+      ".KK....KK.",
+      "KRRK..KRRK",
+      "KRRKKKKRRK",
+      "KRRRRRRRRK",
+      ".KRRRRRRK.",
+      "..KRRRRK..",
+      "...KRRK...",
+      "....KK....",
+    ],
+  },
+  {
+    name: "⭐ 星星",
+    art: [
+      "....K....",
+      "...KYK...",
+      "KKKKYKKKK",
+      "KYYYYYYYK",
+      ".KYYYYYK.",
+      "..KYKYK..",
+      ".KYK.KYK.",
+      "KYK...KYK",
+    ],
+  },
+  {
+    name: "👾 太空侵略者",
+    art: [
+      "..K.....K..",
+      "...K...K...",
+      "..KKKKKKK..",
+      ".KK.KKK.KK.",
+      "KKKKKKKKKKK",
+      "K.KKKKKKK.K",
+      "K.K.....K.K",
+      "...KK.KK...",
+    ],
+  },
+  {
+    name: "🍄 蘑菇",
+    art: [
+      "...KKKKKK...",
+      ".KKRRRRRRKK.",
+      "KRRWWRRWWRRK",
+      "KRRRRRRRRRRK",
+      ".KRRWWWWRRK.",
+      "..KKKKKKKK..",
+      ".KWWWWWWWWK.",
+      "KWWKWWWWKWWK",
+      "KWWKWWWWKWWK",
+      "KWWWWKKWWWWK",
+      ".KWWWWWWWWK.",
+      "..KKKKKKKK..",
+    ],
+  },
+  {
+    name: "🌈 彩虹",
+    art: [
+      ".....YYYYY.....",
+      "....OOOOOOO....",
+      "...RRRRRRRRR...",
+      "..MMMMMMMMMMM..",
+      ".VVVVVVVVVVVVV.",
+      ".KSSSSSSSSSSSK.",
+      "..K.........K..",
+      ".WWK.......KWW.",
+      "WWWK.......KWWW",
+    ],
+  },
+  {
+    name: "👻 小幽灵",
+    art: [
+      "..KKKKKKKK..",
+      ".KRRRRRRRRK.",
+      "KRRRRRRRRRRK",
+      "KWWKRRRRKWWK",
+      "KWNKRRRRKNWK",
+      "KRRRRRRRRRRK",
+      "KRRRRRRRRRRK",
+      "KRRRKRRKRRRK",
+    ],
+  },
+  {
+    name: "🌸 花朵",
+    art: [
+      "......PPP......",
+      "....PPPPPPP....",
+      "..PPPPPPPPPPP..",
+      ".PPPPTTTTTPPPP.",
+      "PPPPTYYYYTPPPPP",
+      "PPPPTYYYYTPPPPP",
+      ".PPPPTTTTTPPPP.",
+      "..PPPPPPPPPPP..",
+      "....PPPPPPP....",
+      "......PPP......",
+      ".......G.......",
+      "..GG...G...GG..",
+      ".......G.......",
+      ".......G.......",
+      ".......G.......",
+    ],
+  },
 ];
 
 const STORAGE_KEY = "perler-beads-save";
@@ -59,6 +204,7 @@ renderer.setSize(container.clientWidth, container.clientHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.appendChild(renderer.domElement);
+renderer.domElement.style.cursor = "none"; // 用 3D 夹子代替系统光标
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -66,6 +212,12 @@ controls.dampingFactor = 0.08;
 controls.maxPolarAngle = Math.PI / 2.05;
 controls.minDistance = 10;
 controls.maxDistance = 200;
+// 中键旋转、右键平移；左键完全留给放豆
+controls.mouseButtons = {
+  LEFT: null,
+  MIDDLE: THREE.MOUSE.ROTATE,
+  RIGHT: THREE.MOUSE.PAN,
+};
 
 // 灯光
 const ambient = new THREE.AmbientLight(0xffffff, 0.55);
@@ -81,15 +233,73 @@ const fillLight = new THREE.DirectionalLight(0x8899ff, 0.3);
 fillLight.position.set(-30, 40, -30);
 scene.add(fillLight);
 
-// 地面
-const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(500, 500),
-  new THREE.MeshStandardMaterial({ color: 0x24272c, roughness: 1 })
+// 木纹桌面（程序化生成贴图）
+function makeWoodTexture() {
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = 512;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#9c6b3d";
+  ctx.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 48; i++) {
+    ctx.strokeStyle = `rgba(58, 34, 14, ${0.04 + Math.random() * 0.09})`;
+    ctx.lineWidth = 1 + Math.random() * 3;
+    ctx.beginPath();
+    const y = Math.random() * 512;
+    ctx.moveTo(0, y);
+    for (let x = 0; x <= 512; x += 32) {
+      ctx.lineTo(x, y + Math.sin(x * 0.02 + i) * 4 + (Math.random() - 0.5) * 3);
+    }
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(10, 10);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const table = new THREE.Mesh(
+  new THREE.BoxGeometry(400, 2, 400),
+  new THREE.MeshStandardMaterial({ map: makeWoodTexture(), roughness: 0.75 })
 );
-ground.rotation.x = -Math.PI / 2;
-ground.position.y = -0.5;
-ground.receiveShadow = true;
-scene.add(ground);
+table.position.y = -1.5; // 桌面在 y = -0.5
+table.receiveShadow = true;
+scene.add(table);
+
+// 桌上的一支铅笔
+function makePencil() {
+  const g = new THREE.Group();
+  const yellow = new THREE.MeshStandardMaterial({ color: 0xf4c542, roughness: 0.6 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 8, 6), yellow);
+  const tipWood = new THREE.Mesh(
+    new THREE.ConeGeometry(0.35, 1, 6),
+    new THREE.MeshStandardMaterial({ color: 0xd9b38c, roughness: 0.85 })
+  );
+  tipWood.position.y = -4.5;
+  tipWood.rotation.x = Math.PI;
+  const tipLead = new THREE.Mesh(
+    new THREE.ConeGeometry(0.13, 0.5, 6),
+    new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5 })
+  );
+  tipLead.position.y = -5.2;
+  tipLead.rotation.x = Math.PI;
+  const eraser = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.35, 0.35, 0.8, 6),
+    new THREE.MeshStandardMaterial({ color: 0xf26ca7, roughness: 0.8 })
+  );
+  eraser.position.y = 4.4;
+  g.add(body, tipWood, tipLead, eraser);
+  g.traverse((o) => {
+    if (o.isMesh) o.castShadow = true;
+  });
+  return g;
+}
+
+const pencil = makePencil();
+pencil.rotation.z = Math.PI / 2; // 平放
+pencil.rotation.y = 0.6;
+pencil.position.set(-cols / 2 - 14, -0.15, rows / 2 + 8);
+scene.add(pencil);
 
 /* ============================================================
  * 画板与豆子（InstancedMesh 高性能渲染）
@@ -211,21 +421,32 @@ function addBead(r, c, colorIdx) {
     removeBead(r, c); // 已有豆子先移除再重建（数量少，简单可靠）
   }
   grid[r][c] = colorIdx;
-  const y = PEG_H + BEAD_H / 2;
-  const pos = cellToWorld(r, c, y);
-  tmpMatrix.identity().setPosition(pos);
   const idx = beadMesh.count;
-  beadMesh.setMatrixAt(idx, tmpMatrix);
-  beadMesh.setColorAt(idx, tmpColor.setHex(PALETTE[colorIdx].hex));
   beadMesh.count++;
-
-  tmpMatrix.makeRotationX(-Math.PI / 2).setPosition(pos.x, y + BEAD_H / 2 + 0.001, pos.z);
-  holeMesh.setMatrixAt(idx, tmpMatrix);
   holeMesh.count++;
-
-  beadMesh.instanceMatrix.needsUpdate = true;
-  holeMesh.instanceMatrix.needsUpdate = true;
+  beadMesh.setColorAt(idx, tmpColor.setHex(PALETTE[colorIdx].hex));
   if (beadMesh.instanceColor) beadMesh.instanceColor.needsUpdate = true;
+
+  const landY = PEG_H + BEAD_H / 2;
+  if (falling.length < MAX_FALLING) {
+    // 从夹子尖落下，带重力和落地压扁动画
+    heldBead.getWorldPosition(tipWorld);
+    const target = cellToWorld(r, c, 0);
+    falling.push({
+      idx, r, c,
+      x: tipWorld.x, z: tipWorld.z,
+      y: Math.max(tipWorld.y, landY + 0.9),
+      tx: target.x, tz: target.z,
+      vy: -1, landY, landed: false, squashT: 0,
+    });
+  } else {
+    // 超量（批量导入）直接落定
+    const pos = cellToWorld(r, c, landY);
+    tmpMatrix.identity().setPosition(pos);
+    beadMesh.setMatrixAt(idx, tmpMatrix);
+    tmpMatrix.makeRotationX(-Math.PI / 2).setPosition(pos.x, landY + BEAD_H / 2 + 0.001, pos.z);
+    holeMesh.setMatrixAt(idx, tmpMatrix);
+  }
   beadCount++;
 }
 
@@ -236,6 +457,7 @@ function removeBead(r, c) {
 }
 
 function rebuildBeads() {
+  falling.length = 0; // 飞行中的豆子直接由下面的循环落定
   let i = 0;
   beadCount = 0;
   const y = PEG_H + BEAD_H / 2;
@@ -272,6 +494,183 @@ function fitCamera() {
 }
 
 /* ============================================================
+ * 3D 夹子光标 + 落豆动画 + 合成音效
+ * ============================================================ */
+const cursorRig = new THREE.Group();
+scene.add(cursorRig);
+{
+  const metal = new THREE.MeshStandardMaterial({ color: 0xaab2bc, metalness: 0.85, roughness: 0.35 });
+  const armGeo = new THREE.BoxGeometry(0.09, 2.3, 0.3);
+  armGeo.translate(0, -1.15, 0); // 原点在顶端，向下伸出
+  const armL = new THREE.Mesh(armGeo, metal);
+  armL.rotation.z = 0.06;
+  const armR = new THREE.Mesh(armGeo, metal);
+  armR.rotation.z = -0.06;
+  const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.16, 0.36), metal);
+  armL.castShadow = armR.castShadow = bridge.castShadow = true;
+  cursorRig.add(armL, armR, bridge);
+}
+
+// 夹着的拼豆
+const heldBead = new THREE.Group();
+const heldBody = new THREE.Mesh(beadGeo, new THREE.MeshStandardMaterial({ roughness: 0.35 }));
+const heldHole = new THREE.Mesh(holeGeo, new THREE.MeshStandardMaterial({ color: 0x222226, roughness: 0.9 }));
+heldHole.rotation.x = -Math.PI / 2;
+heldHole.position.y = BEAD_H / 2 + 0.001;
+heldBead.add(heldBody, heldHole);
+heldBead.position.y = -2.42; // 豆子被夹在镊子尖
+cursorRig.add(heldBead);
+cursorRig.visible = false;
+
+// 指针追踪（窗口级，即使移出画布也保持）
+const pointerNdc = new THREE.Vector2(0, 0);
+let pointerInCanvas = false;
+let pointerOverBoard = false;
+let pressing = false;
+window.addEventListener("pointermove", (e) => {
+  pointerNdc.set(
+    (e.clientX / window.innerWidth) * 2 - 1,
+    -(e.clientY / window.innerHeight) * 2 + 1
+  );
+});
+renderer.domElement.addEventListener("pointerenter", () => (pointerInCanvas = true));
+renderer.domElement.addEventListener("pointerleave", () => {
+  pointerInCanvas = false;
+  pointerOverBoard = false;
+});
+
+const rigTarget = new THREE.Vector3();
+const rigPos = new THREE.Vector3(0, 4.8, 0);
+const zeroPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const tipWorld = new THREE.Vector3();
+
+function updateCursorRig(dt) {
+  raycaster.setFromCamera(pointerNdc, camera);
+  if (raycaster.ray.intersectPlane(zeroPlane, rigTarget)) {
+    const bx = cols / 2 + 3;
+    const bz = rows / 2 + 3;
+    rigTarget.x = THREE.MathUtils.clamp(rigTarget.x, -bx, bx);
+    rigTarget.z = THREE.MathUtils.clamp(rigTarget.z, -bz, bz);
+  }
+  // 按下时夹子下压，松手回弹
+  const targetY = pressing ? 3.2 : 4.8;
+  rigPos.y += (targetY - rigPos.y) * Math.min(1, dt * 12);
+
+  const k = Math.min(1, dt * 9);
+  const prevX = rigPos.x;
+  const prevZ = rigPos.z;
+  rigPos.x += (rigTarget.x - rigPos.x) * k;
+  rigPos.z += (rigTarget.z - rigPos.z) * k;
+  cursorRig.position.copy(rigPos);
+
+  // 移动时轻微倾斜，更有手感
+  const vx = (rigPos.x - prevX) / Math.max(dt, 1e-4);
+  const vz = (rigPos.z - prevZ) / Math.max(dt, 1e-4);
+  const tiltZ = THREE.MathUtils.clamp(-vx * 0.02, -0.3, 0.3);
+  const tiltX = THREE.MathUtils.clamp(vz * 0.02, -0.3, 0.3);
+  const k2 = Math.min(1, dt * 8);
+  cursorRig.rotation.z += (tiltZ - cursorRig.rotation.z) * k2;
+  cursorRig.rotation.x += (tiltX - cursorRig.rotation.x) * k2;
+
+  const showRig = pointerInCanvas && tool !== "pick";
+  cursorRig.visible = showRig;
+  heldBead.visible = showRig && tool === "paint" && !pressing;
+  heldBody.material.color.setHex(PALETTE[currentColor].hex);
+}
+
+/* ---------- 落豆动画（重力 + 落地压扁） ---------- */
+const falling = [];
+const GRAV = 70;
+const MAX_FALLING = 120;
+
+function updateFalling(dt) {
+  for (let i = falling.length - 1; i >= 0; i--) {
+    const f = falling[i];
+    if (!f.landed) {
+      f.vy -= GRAV * dt;
+      f.y += f.vy * dt;
+      // 水平滑向目标格
+      const kh = Math.min(1, dt * 10);
+      f.x += (f.tx - f.x) * kh;
+      f.z += (f.tz - f.z) * kh;
+      if (f.y <= f.landY) {
+        f.y = f.landY;
+        f.landed = true;
+        maybePlaceSound(); // 哒！
+      }
+    } else {
+      f.squashT += dt;
+    }
+    const t = Math.min(1, f.squashT / 0.15);
+    const s = f.landed ? Math.sin(t * Math.PI) : 0;
+    const sxz = 1 + s * 0.2;
+    const sy = 1 - s * 0.28;
+    tmpMatrix.makeScale(sxz, sy, sxz).setPosition(f.x, f.y, f.z);
+    beadMesh.setMatrixAt(f.idx, tmpMatrix);
+    tmpMatrix
+      .makeRotationX(-Math.PI / 2)
+      .scale(new THREE.Vector3(sxz, sxz, 1));
+    tmpMatrix.setPosition(f.x, f.y + (BEAD_H / 2) * sy + 0.001, f.z);
+    holeMesh.setMatrixAt(f.idx, tmpMatrix);
+
+    if (f.landed && f.squashT >= 0.15) {
+      const pos = cellToWorld(f.r, f.c, f.landY);
+      tmpMatrix.identity().setPosition(pos);
+      beadMesh.setMatrixAt(f.idx, tmpMatrix);
+      tmpMatrix.makeRotationX(-Math.PI / 2).setPosition(pos.x, f.landY + BEAD_H / 2 + 0.001, pos.z);
+      holeMesh.setMatrixAt(f.idx, tmpMatrix);
+      falling.splice(i, 1);
+    }
+  }
+  if (falling.length) {
+    beadMesh.instanceMatrix.needsUpdate = true;
+    holeMesh.instanceMatrix.needsUpdate = true;
+  }
+}
+
+/* ---------- 音效（WebAudio 合成，无外部资源） ---------- */
+let audioCtx = null;
+let soundOn = true;
+let lastPlaceSound = 0;
+let lastEraseSound = 0;
+
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+}
+
+function blip(f0, f1, dur, vol, type = "sine") {
+  const t = audioCtx.currentTime;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g).connect(audioCtx.destination);
+  o.start(t);
+  o.stop(t + dur + 0.02);
+}
+
+function maybePlaceSound() {
+  if (!soundOn || !audioCtx) return;
+  const now = performance.now();
+  if (now - lastPlaceSound < 55) return;
+  lastPlaceSound = now;
+  blip(1500 + Math.random() * 500, 900, 0.035, 0.05, "square"); // 哒！
+  blip(320, 110, 0.09, 0.15); // 落地的闷响
+}
+
+function maybeEraseSound() {
+  if (!soundOn || !audioCtx) return;
+  const now = performance.now();
+  if (now - lastEraseSound < 70) return;
+  lastEraseSound = now;
+  blip(480, 160, 0.07, 0.09); // 啵
+}
+
+/* ============================================================
  * 鼠标交互：射线拾取 + 拖动连画
  * ============================================================ */
 const raycaster = new THREE.Raycaster();
@@ -300,21 +699,28 @@ function paintLine(from, to) {
   const dr = to.r - from.r;
   const dc = to.c - from.c;
   const steps = Math.max(Math.abs(dr), Math.abs(dc));
+  let erased = false;
   for (let i = 0; i <= steps; i++) {
     const r = Math.round(from.r + (dr * i) / steps);
     const c = Math.round(from.c + (dc * i) / steps);
     if (eraseDrag || tool === "erase") {
-      if (grid[r][c] !== -1) removeBead(r, c);
+      if (grid[r][c] !== -1) {
+        removeBead(r, c);
+        erased = true;
+      }
     } else {
       addBead(r, c, currentColor);
     }
   }
+  if (erased) maybeEraseSound();
   updateStatus();
 }
 
 renderer.domElement.addEventListener("pointerdown", (e) => {
   const cell = getCell(e);
   if (!cell) return;
+  ensureAudio();
+  pressing = true;
 
   // 左键：按工具操作；右键：始终擦除
   if (e.button === 0) {
@@ -340,15 +746,13 @@ renderer.domElement.addEventListener("pointerdown", (e) => {
 
 renderer.domElement.addEventListener("pointermove", (e) => {
   const cell = getCell(e);
+  pointerOverBoard = !!cell;
 
-  // 悬停预览
-  if (cell && !painting && (tool === "paint" || tool === "erase")) {
+  // 悬停预览（擦除时显示红色；放豆时由夹着的豆子预览）
+  if (cell && !painting && tool === "erase") {
     hoverMesh.visible = true;
-    const pos = cellToWorld(cell.r, cell.c, PEG_H + BEAD_H / 2);
-    hoverMesh.position.copy(pos);
-    hoverMesh.material.color.setHex(
-      tool === "erase" ? 0xff4444 : PALETTE[currentColor].hex
-    );
+    hoverMesh.position.copy(cellToWorld(cell.r, cell.c, PEG_H + BEAD_H / 2));
+    hoverMesh.material.color.setHex(0xff4444);
   } else {
     hoverMesh.visible = false;
   }
@@ -364,6 +768,14 @@ renderer.domElement.addEventListener("pointermove", (e) => {
 window.addEventListener("pointerup", () => {
   painting = false;
   eraseDrag = false;
+  pressing = false;
+  controls.enabled = true;
+});
+
+window.addEventListener("blur", () => {
+  painting = false;
+  eraseDrag = false;
+  pressing = false;
   controls.enabled = true;
 });
 
@@ -406,6 +818,12 @@ document.getElementById("toolPaint").addEventListener("click", () => setTool("pa
 document.getElementById("toolErase").addEventListener("click", () => setTool("erase"));
 document.getElementById("toolPick").addEventListener("click", () => setTool("pick"));
 
+document.getElementById("btnSound").addEventListener("click", (e) => {
+  soundOn = !soundOn;
+  e.currentTarget.textContent = soundOn ? "🔊" : "🔇";
+  if (soundOn) ensureAudio();
+});
+
 document.getElementById("boardSize").addEventListener("change", (e) => {
   const n = parseInt(e.target.value, 10);
   if (beadCount > 0 && !confirm("切换画板尺寸会清空当前图案，确定吗？")) {
@@ -415,6 +833,47 @@ document.getElementById("boardSize").addEventListener("change", (e) => {
   cols = rows = n;
   buildBoard();
 });
+
+/* ============================================================
+ * 内置模板加载
+ * ============================================================ */
+const templateSelect = document.getElementById("templateSelect");
+TEMPLATES.forEach((tpl, i) => {
+  const opt = document.createElement("option");
+  opt.value = i;
+  opt.textContent = tpl.name;
+  templateSelect.appendChild(opt);
+});
+
+templateSelect.addEventListener("change", () => {
+  const idx = templateSelect.value;
+  templateSelect.value = "";
+  if (idx === "") return;
+  loadTemplate(TEMPLATES[idx]);
+});
+
+function loadTemplate(tpl) {
+  if (beadCount > 0 && !confirm("加载模板会覆盖当前图案，确定吗？")) return;
+
+  const h = tpl.art.length;
+  const w = Math.max(...tpl.art.map((r) => r.length));
+  cols = rows = 29;
+  document.getElementById("boardSize").value = "29";
+  buildBoard();
+
+  const r0 = Math.floor((rows - h) / 2);
+  const c0 = Math.floor((cols - w) / 2);
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < tpl.art[r].length; c++) {
+      const colorIdx = CHAR_MAP[tpl.art[r][c]];
+      if (colorIdx === undefined) continue;
+      addBead(r0 + r, c0 + c, colorIdx);
+    }
+  }
+  rebuildBeads();
+  updateStatus();
+  toast(`已加载模板：${tpl.name}`);
+}
 
 document.getElementById("btnClear").addEventListener("click", () => {
   if (beadCount === 0) return;
@@ -428,7 +887,39 @@ document.getElementById("btnClear").addEventListener("click", () => {
 
 function updateStatus() {
   beadCountEl.textContent = beadCount;
+  scheduleAutoSave();
 }
+
+/* ============================================================
+ * 实时自动保存（每次变动后 400ms 防抖写入 localStorage）
+ * ============================================================ */
+const AUTOSAVE_KEY = "perler-beads-autosave";
+let autoSaveTimer = null;
+
+function saveNow() {
+  try {
+    localStorage.setItem(
+      AUTOSAVE_KEY,
+      JSON.stringify({
+        cols,
+        rows,
+        grid: grid.map((row) => row.join(",")).join(";"),
+      })
+    );
+  } catch {
+    /* 存储空间不足时忽略 */
+  }
+}
+
+function scheduleAutoSave() {
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(saveNow, 400);
+}
+
+window.addEventListener("pagehide", () => {
+  clearTimeout(autoSaveTimer);
+  saveNow();
+});
 
 /* ---------- Toast ---------- */
 let toastEl = document.getElementById("toast");
@@ -612,8 +1103,44 @@ window.addEventListener("resize", () => {
 selectColor(currentColor);
 buildBoard();
 
+// 启动时恢复上次的画板（自动保存的内容）
+(function restoreAutoSave() {
+  const raw = localStorage.getItem(AUTOSAVE_KEY);
+  if (!raw) return;
+  try {
+    const data = JSON.parse(raw);
+    cols = data.cols;
+    rows = data.rows;
+    const sel = document.getElementById("boardSize");
+    if (![...sel.options].some((o) => o.value === String(cols))) {
+      const opt = document.createElement("option");
+      opt.value = String(cols);
+      opt.textContent = `${cols} × ${rows}`;
+      sel.appendChild(opt);
+    }
+    sel.value = String(cols);
+    buildBoard();
+    data.grid.split(";").forEach((line, r) => {
+      if (r >= rows) return;
+      line.split(",").forEach((v, c) => {
+        if (c < cols && v !== "-1") addBead(r, c, parseInt(v, 10));
+      });
+    });
+    rebuildBeads();
+    updateStatus();
+  } catch {
+    /* 存档损坏则忽略 */
+  }
+})();
+
+let lastTime = performance.now();
 function animate() {
   requestAnimationFrame(animate);
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  lastTime = now;
+  updateCursorRig(dt);
+  updateFalling(dt);
   controls.update();
   renderer.render(scene, camera);
 }

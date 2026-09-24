@@ -14,17 +14,20 @@
 
 ## 🚀 运行
 
-无需构建，任意静态服务器即可（ES Module + CDN 引入 Three.js）：
-
 ```bash
-# 任选其一
-npx serve .
-python -m http.server 8000
+npm install
+npm run dev        # 开发模式
+npm run build      # 构建到 dist/
+npm run preview    # 预览构建产物
 ```
 
-然后打开 `http://localhost:8000`。
+## 🌐 在线游玩
 
-> 注意：需要通过 HTTP 访问（不能直接双击 html 文件），因为使用了 ES Module。
+每次推送到 `main` 分支，GitHub Actions 会自动构建并部署到 GitHub Pages：
+
+**https://hencter.github.io/perler-beads/**
+
+部署配置见 `.github/workflows/deploy.yml`。
 
 ## 🎮 操作说明
 
@@ -38,7 +41,7 @@ python -m http.server 8000
 
 ## 🛠️ 技术
 
-- [Three.js](https://threejs.org/)（r160，CDN importmap，无打包器）
+- [Three.js](https://threejs.org/) + [Vite](https://vite.dev/)
 - `InstancedMesh` 批量渲染豆子与钉柱
 - 射线与平面求交实现网格拾取，Bresenham 插值实现拖动连画
 - Canvas 2D 实现图片降采样与最近色映射、PNG 导出

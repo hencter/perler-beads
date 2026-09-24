@@ -1,0 +1,30 @@
+{
+  "name": "perler-beads",
+  "version": "1.0.0",
+  "description": "一个基于 **Three.js** 的 3D 拼豆（Perler Beads）小游戏，在浏览器里体验真实的拼豆乐趣：放豆、擦除、取色、导入图片自动转图案、导出图纸。",
+  "main": "main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hencter/perler-beads.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/hencter/perler-beads/issues"
+  },
+  "homepage": "https://github.com/hencter/perler-beads#readme",
+  "dependencies": {
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "vite": "^8.3.0"
+  },
+  "private": true
+}

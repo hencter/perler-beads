@@ -317,8 +317,8 @@ let hoverMesh = null; // 悬停预览
 let capacity = 0;
 
 const beadGeo = new THREE.CylinderGeometry(BEAD_R, BEAD_R, BEAD_H, 20);
-const holeGeo = new THREE.CircleGeometry(0.15, 16);
-const pegGeo = new THREE.CylinderGeometry(0.09, 0.09, PEG_H, 8);
+const holeGeo = new THREE.RingGeometry(0.095, 0.16, 16); // 中孔圆环，能看到穿过的钉柱
+const pegGeo = new THREE.CylinderGeometry(0.09, 0.09, PEG_H + 0.22, 8); // 钉柱穿过豆孔
 const hoverGeo = new THREE.CylinderGeometry(BEAD_R, BEAD_R, BEAD_H + 0.02, 20);
 
 const tmpMatrix = new THREE.Matrix4();
@@ -369,7 +369,9 @@ function buildBoard() {
   let i = 0;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      tmpMatrix.makeTranslation(0, PEG_H / 2, 0).setPosition(cellToWorld(r, c, PEG_H / 2));
+      tmpMatrix
+        .makeTranslation(0, (PEG_H + 0.22) / 2, 0)
+        .setPosition(cellToWorld(r, c, (PEG_H + 0.22) / 2));
       pegMesh.setMatrixAt(i++, tmpMatrix);
     }
   }
@@ -411,6 +413,7 @@ function buildBoard() {
   boardGroup.add(hoverMesh);
 
   fitCamera();
+  layoutBowls();
   updateStatus();
 }
 
@@ -498,18 +501,30 @@ function fitCamera() {
  * ============================================================ */
 const cursorRig = new THREE.Group();
 scene.add(cursorRig);
-{
-  const metal = new THREE.MeshStandardMaterial({ color: 0xaab2bc, metalness: 0.85, roughness: 0.35 });
-  const armGeo = new THREE.BoxGeometry(0.09, 2.3, 0.3);
-  armGeo.translate(0, -1.15, 0); // 原点在顶端，向下伸出
-  const armL = new THREE.Mesh(armGeo, metal);
-  armL.rotation.z = 0.06;
-  const armR = new THREE.Mesh(armGeo, metal);
-  armR.rotation.z = -0.06;
-  const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.16, 0.36), metal);
-  armL.castShadow = armR.castShadow = bridge.castShadow = true;
-  cursorRig.add(armL, armR, bridge);
+const tweezerMetal = new THREE.MeshStandardMaterial({ color: 0xaab2bc, metalness: 0.85, roughness: 0.35 });
+// 上段：微张的直臂，拼豆就堆在上面
+const upperArmGeo = new THREE.BoxGeometry(0.09, 1.8, 0.3);
+upperArmGeo.translate(0, -0.9, 0);
+// 下段：向内弯的夹尖
+const tipArmGeo = new THREE.BoxGeometry(0.09, 0.75, 0.3);
+tipArmGeo.translate(0, -0.375, 0);
+
+function makeArm(sign) {
+  const arm = new THREE.Group();
+  arm.rotation.z = sign * 0.42;
+  const upper = new THREE.Mesh(upperArmGeo, tweezerMetal);
+  const tip = new THREE.Mesh(tipArmGeo, tweezerMetal);
+  tip.position.y = -1.8;
+  tip.rotation.z = -sign * 0.9; // 夹尖向内收拢，夹住豆子
+  upper.castShadow = tip.castShadow = true;
+  arm.add(upper, tip);
+  return arm;
 }
+const armL = makeArm(1);
+const armR = makeArm(-1);
+const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.16, 0.36), tweezerMetal);
+bridge.castShadow = true;
+cursorRig.add(armL, armR, bridge);
 
 // 夹着的拼豆
 const heldBead = new THREE.Group();
@@ -521,6 +536,173 @@ heldBead.add(heldBody, heldHole);
 heldBead.position.y = -2.42; // 豆子被夹在镊子尖
 cursorRig.add(heldBead);
 cursorRig.visible = false;
+
+/* 镊子两臂上堆着的拼豆：放豆时逐颗滑向尖端，用完要去碗里夹 */
+const STACK_N = 3;
+const STACK_GAP = 0.36;
+const STACK_TOP = -1.05;
+const stackBodyMat = new THREE.MeshStandardMaterial({ roughness: 0.35 });
+const stackHoleMat = new THREE.MeshStandardMaterial({ color: 0x222226, roughness: 0.9 });
+
+function makeStackBead() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(beadGeo, stackBodyMat);
+  const hole = new THREE.Mesh(holeGeo, stackHoleMat);
+  hole.rotation.x = -Math.PI / 2;
+  hole.position.y = BEAD_H / 2 + 0.001;
+  g.add(body, hole);
+  return g;
+}
+
+const stacks = {
+  L: { arm: armL, beads: [], anims: [] },
+  R: { arm: armR, beads: [], anims: [] },
+};
+for (const key of ["L", "R"]) {
+  for (let i = 0; i < STACK_N; i++) {
+    const b = makeStackBead();
+    b.position.y = STACK_TOP - i * STACK_GAP;
+    stacks[key].arm.add(b);
+    stacks[key].beads.push(b);
+  }
+}
+let supplyArm = 0;
+let grabState = null; // 去碗里夹豆的状态机
+
+const easeOutQuad = (p) => 1 - (1 - p) * (1 - p);
+
+function stackTotal() {
+  return stacks.L.beads.length + stacks.R.beads.length;
+}
+
+function clearStacks() {
+  for (const key of ["L", "R"]) {
+    const s = stacks[key];
+    s.anims.length = 0;
+    s.beads.forEach((b) => b.parent && b.parent.remove(b));
+    s.beads.length = 0;
+  }
+}
+
+// 从碗里夹一撮豆（2~5 颗）到镊子两臂
+function refillStacks(total) {
+  let arm = 0;
+  for (let n = 0; n < total; n++) {
+    const key = arm++ % 2 === 0 ? "L" : "R";
+    const stack = stacks[key];
+    if (stack.beads.length >= STACK_N) continue;
+    const nb = makeStackBead();
+    nb.position.y = STACK_TOP - stack.beads.length * STACK_GAP;
+    nb.scale.setScalar(0.01);
+    stack.arm.add(nb);
+    stack.beads.unshift(nb);
+    stack.anims.push({ bead: nb, type: "in", t: 0, delay: n * 0.06 });
+  }
+}
+
+function supplyBead() {
+  const key = supplyArm++ % 2 === 0 ? "L" : "R";
+  const stack = stacks[key];
+  if (!stack || stack.anims.length > 0) return; // 该臂正在动画
+  if (stack.beads.length === 0) return;
+  // 底部豆滑向尖端并消失（它就是要放下的那颗）
+  const bottom = stack.beads.pop();
+  stack.anims.push({ bead: bottom, type: "out", t: 0, delay: 0, fromY: bottom.position.y });
+  // 其余豆下滑一格
+  stack.beads.forEach((b, i) => {
+    stack.anims.push({ bead: b, type: "slide", t: 0, delay: 0, fromY: b.position.y, toY: STACK_TOP - i * STACK_GAP });
+  });
+}
+
+function updateStacks(dt) {
+  for (const key of ["L", "R"]) {
+    const stack = stacks[key];
+    for (let i = stack.anims.length - 1; i >= 0; i--) {
+      const a = stack.anims[i];
+      if (a.delay > 0) {
+        a.delay -= dt;
+        continue;
+      }
+      a.t += dt;
+      const p = Math.min(1, a.t / 0.13);
+      if (a.type === "out") {
+        a.bead.position.y = THREE.MathUtils.lerp(a.fromY, -2.4, easeOutQuad(p));
+        a.bead.scale.setScalar(1 - p * p);
+        if (p >= 1) {
+          a.bead.parent.remove(a.bead);
+          stack.anims.splice(i, 1);
+        }
+      } else if (a.type === "slide") {
+        a.bead.position.y = THREE.MathUtils.lerp(a.fromY, a.toY, easeOutQuad(p));
+        if (p >= 1) stack.anims.splice(i, 1);
+      } else {
+        a.bead.scale.setScalar(Math.max(0.01, easeOutQuad(p)));
+        if (p >= 1) stack.anims.splice(i, 1);
+      }
+    }
+  }
+}
+
+/* ---------- 拼豆碗：桌上的 3D 调色盘，点击用镊子去夹豆 ---------- */
+const BOWL_BEADS = 12;
+const bowlGeo = new THREE.LatheGeometry(
+  [
+    new THREE.Vector2(0.01, 0.04),
+    new THREE.Vector2(0.9, 0.08),
+    new THREE.Vector2(1.6, 0.3),
+    new THREE.Vector2(2.05, 0.75),
+    new THREE.Vector2(2.3, 1.25),
+  ],
+  28
+);
+const bowlMat = new THREE.MeshStandardMaterial({ color: 0xe8e4de, roughness: 0.5, side: THREE.DoubleSide });
+const pileMat = new THREE.MeshStandardMaterial({ roughness: 0.35 });
+const bowls = [];
+
+for (let i = 0; i < PALETTE.length; i++) {
+  const bowl = new THREE.Mesh(bowlGeo, bowlMat);
+  bowl.userData.colorIdx = i;
+  bowl.castShadow = true;
+  bowl.position.y = -0.55; // 碗底贴桌面
+  scene.add(bowl);
+  bowls.push(bowl);
+
+  // 碗里的一堆豆
+  const pile = new THREE.InstancedMesh(beadGeo, pileMat, BOWL_BEADS);
+  pile.castShadow = true;
+  for (let j = 0; j < BOWL_BEADS; j++) {
+    const ang = Math.random() * Math.PI * 2;
+    const rr = Math.sqrt(Math.random()) * 1.6;
+    const y = 0.08 + (rr / 1.9) ** 2 * 0.22 + Math.random() * 0.1;
+    tmpMatrix.makeRotationY(Math.random() * Math.PI).setPosition(Math.cos(ang) * rr, y, Math.sin(ang) * rr);
+    pile.setMatrixAt(j, tmpMatrix);
+    pile.setColorAt(j, tmpColor.setHex(PALETTE[i].hex));
+  }
+  bowl.add(pile);
+}
+
+function layoutBowls() {
+  const perRow = 10;
+  const gap = 5.4;
+  const z0 = -(rows / 2 + 8);
+  for (let i = 0; i < bowls.length; i++) {
+    const row = Math.floor(i / perRow);
+    const col = i % perRow;
+    bowls[i].position.set((col - (perRow - 1) / 2) * gap, -0.55, z0 - row * 5.6);
+  }
+}
+
+// 镊子飞去碗里夹一撮豆；cell 为要补放的目标格（可为空）
+function startGrab(bowlPos, cell) {
+  grabState = {
+    phase: "move",
+    t: 0,
+    bowl: bowlPos.clone(),
+    cell: cell || null,
+    total: 2 + Math.floor(Math.random() * 4), // 一次夹 2~5 颗
+  };
+  pressing = false;
+}
 
 // 指针追踪（窗口级，即使移出画布也保持）
 const pointerNdc = new THREE.Vector2(0, 0);
@@ -544,6 +726,8 @@ const rigPos = new THREE.Vector3(0, 4.8, 0);
 const zeroPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const tipWorld = new THREE.Vector3();
 
+let pressPitch = 0; // 按下时的前倾角度
+
 function updateCursorRig(dt) {
   raycaster.setFromCamera(pointerNdc, camera);
   if (raycaster.ray.intersectPlane(zeroPlane, rigTarget)) {
@@ -552,16 +736,53 @@ function updateCursorRig(dt) {
     rigTarget.x = THREE.MathUtils.clamp(rigTarget.x, -bx, bx);
     rigTarget.z = THREE.MathUtils.clamp(rigTarget.z, -bz, bz);
   }
-  // 按下时夹子下压，松手回弹
-  const targetY = pressing ? 3.2 : 4.8;
+
+  let tx = rigTarget.x;
+  let tz = rigTarget.z;
+  let targetY = pressing ? 3.2 : 4.8;
+  let pitchTarget = pressing ? 0.32 : 0; // 按下时前倾，像手放下去
+
+  // 去碗里夹豆的状态机
+  if (grabState) {
+    grabState.t += dt;
+    if (grabState.phase === "move") {
+      tx = grabState.bowl.x;
+      tz = grabState.bowl.z;
+      targetY = 4.8;
+      if (grabState.t > 0.3) {
+        grabState.phase = "dip";
+        grabState.t = 0;
+      }
+    } else if (grabState.phase === "dip") {
+      tx = grabState.bowl.x;
+      tz = grabState.bowl.z;
+      targetY = 3.6; // 探进碗里
+      pitchTarget = 0.5;
+      if (grabState.t > 0.25) {
+        refillStacks(grabState.total);
+        if (audioCtx) blip(500, 140, 0.12, 0.1); // 舀豆 噗
+        grabState.phase = "lift";
+        grabState.t = 0;
+      }
+    } else {
+      if (grabState.t > 0.22) {
+        const cell = grabState.cell;
+        grabState = null;
+        if (cell) paintLine(cell, cell); // 补放刚才那一下
+      }
+    }
+  }
+
   rigPos.y += (targetY - rigPos.y) * Math.min(1, dt * 12);
 
-  const k = Math.min(1, dt * 9);
+  const k = Math.min(1, dt * (grabState && grabState.phase === "move" ? 5 : 9));
   const prevX = rigPos.x;
   const prevZ = rigPos.z;
-  rigPos.x += (rigTarget.x - rigPos.x) * k;
-  rigPos.z += (rigTarget.z - rigPos.z) * k;
+  rigPos.x += (tx - rigPos.x) * k;
+  rigPos.z += (tz - rigPos.z) * k;
   cursorRig.position.copy(rigPos);
+
+  pressPitch += (pitchTarget - pressPitch) * Math.min(1, dt * 10);
 
   // 移动时轻微倾斜，更有手感
   const vx = (rigPos.x - prevX) / Math.max(dt, 1e-4);
@@ -570,12 +791,13 @@ function updateCursorRig(dt) {
   const tiltX = THREE.MathUtils.clamp(vz * 0.02, -0.3, 0.3);
   const k2 = Math.min(1, dt * 8);
   cursorRig.rotation.z += (tiltZ - cursorRig.rotation.z) * k2;
-  cursorRig.rotation.x += (tiltX - cursorRig.rotation.x) * k2;
+  cursorRig.rotation.x += (tiltX + pressPitch - cursorRig.rotation.x) * k2;
 
   const showRig = pointerInCanvas && tool !== "pick";
   cursorRig.visible = showRig;
-  heldBead.visible = showRig && tool === "paint" && !pressing;
+  heldBead.visible = showRig && tool === "paint" && !pressing && !grabState;
   heldBody.material.color.setHex(PALETTE[currentColor].hex);
+  stackBodyMat.color.setHex(PALETTE[currentColor].hex);
 }
 
 /* ---------- 落豆动画（重力 + 落地压扁） ---------- */
@@ -710,6 +932,7 @@ function paintLine(from, to) {
       }
     } else {
       addBead(r, c, currentColor);
+      supplyBead(); // 镊子上一颗豆滑向尖端
     }
   }
   if (erased) maybeEraseSound();
@@ -717,10 +940,22 @@ function paintLine(from, to) {
 }
 
 renderer.domElement.addEventListener("pointerdown", (e) => {
-  const cell = getCell(e);
+  const cell = getCell(e); // 顺便给 raycaster 上了指针
+
+  // 点到拼豆碗：换色，并让镊子去碗里夹一撮豆
+  const bowlHits = raycaster.intersectObjects(bowls);
+  if (bowlHits.length) {
+    ensureAudio();
+    const idx = bowlHits[0].object.userData.colorIdx;
+    if (idx !== currentColor) selectColor(idx);
+    if (!grabState && stackTotal() < STACK_N * 2) {
+      startGrab(bowlHits[0].object.position, null);
+    }
+    return;
+  }
+
   if (!cell) return;
   ensureAudio();
-  pressing = true;
 
   // 左键：按工具操作；右键：始终擦除
   if (e.button === 0) {
@@ -731,13 +966,20 @@ renderer.domElement.addEventListener("pointerdown", (e) => {
       }
       return;
     }
-    eraseDrag = tool === "erase";
+    if (tool === "erase") {
+      eraseDrag = true;
+    } else if (stackTotal() === 0 && !grabState) {
+      // 镊子上没豆了：先去碗里夹一撮，回来补放这一下
+      startGrab(bowls[currentColor].position, cell);
+      return;
+    }
   } else if (e.button === 2) {
     eraseDrag = true;
   } else {
     return;
   }
 
+  pressing = true;
   painting = true;
   controls.enabled = false;
   lastCell = cell;
@@ -798,6 +1040,7 @@ PALETTE.forEach((p, i) => {
 });
 
 function selectColor(i) {
+  if (i !== currentColor) clearStacks(); // 换色 = 倒掉镊子上的豆，去碗里重新夹
   currentColor = i;
   document.querySelectorAll(".swatch").forEach((el, idx) => {
     el.classList.toggle("selected", idx === i);
@@ -825,12 +1068,26 @@ document.getElementById("btnSound").addEventListener("click", (e) => {
 });
 
 document.getElementById("boardSize").addEventListener("change", (e) => {
+  if (e.target.value === "custom") {
+    document.getElementById("customSize").hidden = false;
+    return;
+  }
+  document.getElementById("customSize").hidden = true;
   const n = parseInt(e.target.value, 10);
   if (beadCount > 0 && !confirm("切换画板尺寸会清空当前图案，确定吗？")) {
     e.target.value = String(cols);
     return;
   }
   cols = rows = n;
+  buildBoard();
+});
+
+document.getElementById("btnApplySize").addEventListener("click", () => {
+  const w = Math.min(150, Math.max(5, parseInt(document.getElementById("customW").value, 10) || 29));
+  const h = Math.min(150, Math.max(5, parseInt(document.getElementById("customH").value, 10) || 29));
+  if (beadCount > 0 && !confirm("切换画板尺寸会清空当前图案，确定吗？")) return;
+  cols = w;
+  rows = h;
   buildBoard();
 });
 
@@ -1140,6 +1397,7 @@ function animate() {
   const dt = Math.min(0.05, (now - lastTime) / 1000);
   lastTime = now;
   updateCursorRig(dt);
+  updateStacks(dt);
   updateFalling(dt);
   controls.update();
   renderer.render(scene, camera);

@@ -166,6 +166,31 @@ body {
   grid-area: canvas;
   position: relative;
   overflow: hidden;
+  cursor: none; /* 3D 夹子代替系统光标 */
+}
+
+.custom-size input {
+  width: 52px;
+  background: #3a3f47;
+  color: #e6e6e6;
+  border: 1px solid #4a5058;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+
+.custom-size button {
+  background: #5b8def;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.custom-size button:hover {
+  background: #4a7bd8;
 }
 
 #canvas-container canvas {

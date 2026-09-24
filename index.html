@@ -17,8 +17,15 @@
             <option value="29">29 × 29</option>
             <option value="58" selected>58 × 58</option>
             <option value="80">80 × 80</option>
+            <option value="custom">自定义…</option>
           </select>
         </label>
+        <span id="customSize" class="custom-size" hidden>
+          <input id="customW" type="number" min="5" max="150" value="40" />
+          ×
+          <input id="customH" type="number" min="5" max="150" value="40" />
+          <button id="btnApplySize">应用</button>
+        </span>
         <label>
           模板：
           <select id="templateSelect">
@@ -48,6 +55,7 @@
         <div class="hint">
           鼠标就是夹子，夹着一颗豆<br />
           左键放下豆子（哒！）· 右键擦除<br />
+          没豆了会自动去碗里夹 🥣<br />
           中键拖动旋转视角 · 滚轮缩放
         </div>
       </div>

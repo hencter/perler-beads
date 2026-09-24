@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Perler Beads 拼豆工坊</title>
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <header id="topbar">
+      <h1>🟣 Perler Beads 拼豆工坊</h1>
+      <div class="controls">
+        <label>
+          画板：
+          <select id="boardSize">
+            <option value="29">29 × 29</option>
+            <option value="58" selected>58 × 58</option>
+            <option value="80">80 × 80</option>
+          </select>
+        </label>
+        <button id="btnImport" title="把图片自动转换成拼豆图案">🖼️ 导入图片</button>
+        <input type="file" id="fileInput" accept="image/*" hidden />
+        <button id="btnExport" title="导出拼豆图案 PNG">📸 导出 PNG</button>
+        <button id="btnSave" title="保存到浏览器">💾 保存</button>
+        <button id="btnLoad" title="从浏览器读取">📂 读取</button>
+        <button id="btnClear" class="danger" title="清空画板">🗑️ 清空</button>
+      </div>
+    </header>
+
+    <aside id="sidebar">
+      <div class="tools">
+        <button id="toolPaint" class="tool active" title="左键放豆">🖌️ 放豆</button>
+        <button id="toolErase" class="tool" title="左键移除豆">🧽 擦除</button>
+        <button id="toolPick" class="tool" title="吸取颜色">💉 取色</button>
+      </div>
+      <div id="palette"></div>
+      <div id="status">
+        <div>当前颜色：<span id="curColorName"></span></div>
+        <div>已放豆数：<span id="beadCount">0</span></div>
+        <div class="hint">
+          左键拖动放豆 · 右键擦除<br />
+          拖拽空白处旋转视角 · 滚轮缩放
+        </div>
+      </div>
+    </aside>
+
+    <main id="canvas-container"></main>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
